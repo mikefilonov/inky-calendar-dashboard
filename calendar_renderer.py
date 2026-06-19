@@ -287,11 +287,11 @@ def draw_calendar(resolution, events, tz):
                     draw_sharp_text(img, (x_events_start, ev_y), time_str, font_today_time, COLOR_ACCENT)
                     
                     summary = ev["summary"]
-                    # Assign custom color highlights: Alina (Blue), Maxim (Black)
+                    # Assign custom color highlights: Sofia/Sofya (Blue), Misha (Black)
                     summary_color = COLOR_TEXT
-                    if summary.startswith("Маша"):
+                    if summary.startswith("София") or summary.startswith("Софья"):
                         summary_color = COLOR_BLUE
-                    elif summary.startswith("Максим"):
+                    elif summary.startswith("Миша"):
                         summary_color = COLOR_TEXT
                         
                     draw_sharp_text(img, (x_events_start + 110, ev_y), summary, font_today_title, summary_color)

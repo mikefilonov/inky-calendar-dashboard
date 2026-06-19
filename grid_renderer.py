@@ -61,29 +61,29 @@ def wrap_text(text, font, max_width):
 
 def get_event_colors(summary):
     """Returns (bg_color, text_color) based on the event subject."""
-    # Masha -> Burgundy/Dark Purple
-    if summary.startswith("Маша"):
+    # Sofya/Sofia -> Burgundy/Dark Purple
+    if summary.startswith("София") or summary.startswith("Софья"):
         return (50, 15, 45), (255, 255, 255)
     # Misha -> Terracotta/Orange-Brown
-    elif summary.startswith("Максим"):
+    elif summary.startswith("Миша"):
         return (150, 60, 25), (255, 255, 255)
     # Default -> Yellow
     return (240, 195, 30), (0, 0, 0)
 
 def get_event_colors_non_today(summary):
     """Returns (accent_color, text_color) for non-today text layout."""
-    # Masha -> Burgundy/Dark Purple
-    if summary.startswith("Маша"):
+    # Sofya/Sofia -> Burgundy/Dark Purple
+    if summary.startswith("София") or summary.startswith("Софья"):
         return (50, 15, 45), (0, 0, 0)
     # Misha -> Terracotta/Orange-Brown
-    elif summary.startswith("Максим"):
+    elif summary.startswith("Миша"):
         return (150, 60, 25), (0, 0, 0)
     # Default -> Yellow/Mustard
     return (210, 170, 20), (0, 0, 0)
 
 def split_summary_by_person(summary):
     """Splits summary into (person, event_title)"""
-    for prefix in ["Маша:", "Максим:"]:
+    for prefix in ["София:", "Софья:", "Миша:"]:
         if summary.startswith(prefix):
             return prefix[:-1], summary[len(prefix):].strip()
     return "", summary
@@ -158,13 +158,51 @@ def draw_calendar(resolution, events, tz, today_date=None):
     
     # 4. Draw Today's Column (Left Column)
     today_events = sorted(events_by_date[today_date], key=lambda e: e["start"])
-    card_height = 112  # Reclaimed space allows larger card height (was 96)
-    card_spacing = 14
+    num_today = len(today_events)
+    if num_today > 0:
+        card_spacing = 10
+        # Total height space available: 436px (from y_grid_start + 12 to height - 4)
+        card_height = min(112, (436 - (num_today - 1) * card_spacing) // num_today)
+        card_height = max(36, card_height)
+    else:
+        card_height = 112
+        card_spacing = 14
+
     for ev_idx, ev in enumerate(today_events):
         y_start = y_grid_start + 12 + ev_idx * (card_height + card_spacing)
-        if y_start + card_height > height - 4:
+        if y_start + card_height > height - 2:
             break
             
+        # Determine sizes dynamically based on card_height to ensure text fits
+        if card_height >= 95:
+            size_title, size_time, size_person = 26, 15, 16
+            time_y_offset = 8
+            person_y_offset = 7
+            title_start_y = 36
+            line_height = 28
+        elif card_height >= 75:
+            size_title, size_time, size_person = 20, 13, 14
+            time_y_offset = 6
+            person_y_offset = 5
+            title_start_y = 28
+            line_height = 22
+        elif card_height >= 52:
+            size_title, size_time, size_person = 16, 11, 12
+            time_y_offset = 4
+            person_y_offset = 3
+            title_start_y = 20
+            line_height = 18
+        else:
+            size_title, size_time, size_person = 13, 10, 10
+            time_y_offset = 2
+            person_y_offset = 2
+            title_start_y = 14
+            line_height = 13
+
+        font_event_time_today = load_crisp_font(size_time, bold=False)
+        font_event_person_today = load_crisp_font(size_person, bold=True)
+        font_event_title_today = load_crisp_font(size_title, bold=True)
+
         bg_col, text_col = get_event_colors(ev["summary"])
         
         # Draw Event Card Background & Border (thick black border)
@@ -181,25 +219,25 @@ def draw_calendar(resolution, events, tz, today_date=None):
         time_str = f"{start_str} - {end_str}"
         
         # Time label at top-left
-        draw_sharp_text(img, (col_x_positions[0] + 24, y_start + 8), time_str, font_event_time_today, text_col)
+        draw_sharp_text(img, (col_x_positions[0] + 24, y_start + time_y_offset), time_str, font_event_time_today, text_col)
         
         # Split prefix
         person, title = split_summary_by_person(ev["summary"])
         if person:
             person_lbl = f"[{person.upper()}]"
             lbl_w = draw.textlength(person_lbl, font=font_event_person_today)
-            draw_sharp_text(img, (col_x_positions[0] + col_widths[0] - 24 - lbl_w, y_start + 7), person_lbl, font_event_person_today, text_col)
+            draw_sharp_text(img, (col_x_positions[0] + col_widths[0] - 24 - lbl_w, y_start + person_y_offset), person_lbl, font_event_person_today, text_col)
             
-        # Wrap and draw title (plenty of horizontal space: 480 - 48 = 432px!)
+        # Wrap and draw title
         padded_width = col_widths[0] - 48
         wrapped_lines = wrap_text(title, font_event_title_today, padded_width)
         
-        curr_y = y_start + 36
+        curr_y = y_start + title_start_y
         for line in wrapped_lines:
-            if curr_y + 28 > y_start + card_height - 2:
+            if curr_y + line_height > y_start + card_height - 2:
                 break
             draw_sharp_text(img, (col_x_positions[0] + 24, curr_y), line, font_event_title_today, text_col)
-            curr_y += 28
+            curr_y += line_height
             
     # 5. Draw Future Days Column (Right Column, split vertically for Tomorrow and Day-After-Tomorrow)
     y_cursor = y_grid_start
@@ -223,27 +261,52 @@ def draw_calendar(resolution, events, tz, today_date=None):
         
         # Fetch events for this day
         day_events = sorted(events_by_date[day_date], key=lambda e: e["start"])
-        
-        item_height = 50  # Optimized height to fit up to 3 events per day
-        item_spacing = 8
+        num_day = len(day_events)
+        if num_day > 0:
+            item_spacing = 6
+            # Total height space available: 192px (from y_seg_start + 32 to y_seg_start + segment_height - 2)
+            item_height = min(56, (192 - (num_day - 1) * item_spacing) // num_day)
+            item_height = max(30, item_height)
+        else:
+            item_height = 50
+            item_spacing = 8
+            
         for ev_idx, ev in enumerate(day_events):
             y_item_start = y_seg_start + 32 + ev_idx * (item_height + item_spacing)
-            
-            # Check segment overflow
             if y_item_start + item_height > y_seg_start + segment_height - 2:
                 break
                 
+            # Font size mapping based on item_height
+            if item_height >= 50:
+                size_title_other, size_time_other = 16, 12
+                other_time_y_offset = 2
+                other_title_start_y = 20
+                other_line_height = 18
+            elif item_height >= 40:
+                size_title_other, size_time_other = 13, 11
+                other_time_y_offset = 1
+                other_title_start_y = 16
+                other_line_height = 15
+            else:
+                size_title_other, size_time_other = 11, 10
+                other_time_y_offset = 0
+                other_title_start_y = 12
+                other_line_height = 12
+
+            font_event_title_other = load_crisp_font(size_title_other, bold=True)
+            font_event_time_other = load_crisp_font(size_time_other, bold=False)
+
             accent_col, text_col = get_event_colors_non_today(ev["summary"])
             
             # Left accent stripe
             draw.rectangle(
-                [(col_x_positions[1] + 12, y_item_start + 3), (col_x_positions[1] + 17, y_item_start + item_height - 3)],
+                [(col_x_positions[1] + 12, y_item_start + 2), (col_x_positions[1] + 17, y_item_start + item_height - 2)],
                 fill=accent_col
             )
             
             # Start time
             start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
-            draw_sharp_text(img, (col_x_positions[1] + 26, y_item_start + 2), start_str, font_event_time_other, text_col)
+            draw_sharp_text(img, (col_x_positions[1] + 26, y_item_start + other_time_y_offset), start_str, font_event_time_other, text_col)
             
             # Split summary
             person, title = split_summary_by_person(ev["summary"])
@@ -253,11 +316,11 @@ def draw_calendar(resolution, events, tz, today_date=None):
             padded_width = col_widths[1] - 38
             wrapped_lines = wrap_text(full_display_str, font_event_title_other, padded_width)
             
-            curr_y = y_item_start + 20
+            curr_y = y_item_start + other_title_start_y
             for line in wrapped_lines:
-                if curr_y + 18 > y_item_start + item_height:
+                if curr_y + other_line_height > y_item_start + item_height:
                     break
                 draw_sharp_text(img, (col_x_positions[1] + 26, curr_y), line, font_event_title_other, text_col)
-                curr_y += 18
+                curr_y += other_line_height
                 
     return img
