@@ -6,6 +6,11 @@ A Python-based e-ink calendar dashboard designed for Raspberry Pi. It fetches ev
 
 <img width="800" height="480" alt="calendar" src="https://github.com/user-attachments/assets/6a63053d-7791-42aa-921d-74ea4dd03dee" />
 
+## 🎯 Motivation
+
+We wanted a low-maintenance, distraction-free display for our home that plugs directly into our shared family calendar. This setup allows us to easily update schedules from our phones while giving our kids a physical, easy-to-read dashboard to check their own activities (like gymnastics, chess, and speech therapy) without needing screens or mobile devices.
+
+---
 
 ## 🛠️ Hardware Requirements
 
