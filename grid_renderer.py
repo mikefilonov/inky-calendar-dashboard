@@ -303,12 +303,11 @@ def draw_calendar(resolution, events, tz, today_date=None):
                 font_size = 10
 
             font_event_other = load_crisp_font(font_size, bold=True)
-            bg_col, text_col = get_event_colors(ev["summary"], unique_people, person_colors)
+            bg_col, _ = get_event_colors(ev["summary"], unique_people, person_colors)
             
-            # Draw rounded pill capsule
-            draw.rounded_rectangle(
-                [(col_x_positions[1] + 12, y_item_start), (width - 12, y_item_start + item_height)],
-                radius=4,
+            # Draw a colored vertical line (stripe) on the left of each event
+            draw.rectangle(
+                [(col_x_positions[1] + 12, y_item_start + 2), (col_x_positions[1] + 17, y_item_start + item_height - 2)],
                 fill=bg_col
             )
             
@@ -317,8 +316,8 @@ def draw_calendar(resolution, events, tz, today_date=None):
             person, title = split_summary_by_person(ev["summary"], unique_people)
             display_text = f"{start_str}  {person}: {title}" if person else f"{start_str}  {title}"
             
-            # Truncate text if it exceeds horizontal space inside the pill
-            max_text_width = width - 12 - 20 - (col_x_positions[1] + 20)  # ~276px
+            # Truncate text if it exceeds horizontal space
+            max_text_width = width - 12 - 26 - (col_x_positions[1] + 26)
             text_w = draw.textlength(display_text, font=font_event_other)
             if text_w > max_text_width:
                 while len(display_text) > 3 and draw.textlength(display_text + "...", font=font_event_other) > max_text_width:
@@ -330,6 +329,6 @@ def draw_calendar(resolution, events, tz, today_date=None):
             text_h = bbox[3] - bbox[1]
             text_y = y_item_start + (item_height - text_h) // 2 - bbox[1]
             
-            draw_sharp_text(img, (col_x_positions[1] + 20, text_y), display_text, font_event_other, text_col)
+            draw_sharp_text(img, (col_x_positions[1] + 26, text_y), display_text, font_event_other, COLOR_TEXT)
                 
     return img
