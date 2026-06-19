@@ -219,7 +219,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
 
         font_event_time_today = load_crisp_font(size_time, bold=False)
         font_event_person_today = load_crisp_font(size_person, bold=True)
-        font_event_title_today = load_crisp_font(size_title, bold=True)
+        font_event_title_today = load_crisp_font(size_title, bold=False)
 
         bg_col, text_col = get_event_colors(ev["summary"], unique_people, person_colors)
         

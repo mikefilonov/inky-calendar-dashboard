@@ -268,7 +268,7 @@ def draw_calendar(resolution, events, tz):
     
     # Today Expanded fonts
     font_today_time = load_font(20, bold=True)
-    font_today_title = load_font(20, bold=True)
+    font_today_title = load_font(20, bold=False)
     
     # Layout rendering (5 rows: Today expanded, next 4 collapsed)
     for i, day_date in enumerate(week_dates):
