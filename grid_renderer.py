@@ -59,33 +59,44 @@ def wrap_text(text, font, max_width):
         
     return lines
 
-def get_event_colors(summary):
-    """Returns (bg_color, text_color) based on the event subject."""
-    # Sofya/Sofia -> Burgundy/Dark Purple
-    if summary.startswith("София") or summary.startswith("Софья"):
-        return (50, 15, 45), (255, 255, 255)
-    # Misha -> Terracotta/Orange-Brown
-    elif summary.startswith("Миша"):
-        return (150, 60, 25), (255, 255, 255)
-    # Default -> Yellow
-    return (240, 195, 30), (0, 0, 0)
+def extract_unique_people(events):
+    people = set()
+    for ev in events:
+        summary = ev.get("summary", "")
+        if ":" in summary:
+            parts = summary.split(":", 1)
+            possible_person = parts[0].strip()
+            if possible_person and " " not in possible_person and len(possible_person) < 20:
+                people.add(possible_person)
+    return sorted(list(people))
 
-def get_event_colors_non_today(summary):
-    """Returns (accent_color, text_color) for non-today text layout."""
-    # Sofya/Sofia -> Burgundy/Dark Purple
-    if summary.startswith("София") or summary.startswith("Софья"):
-        return (50, 15, 45), (0, 0, 0)
-    # Misha -> Terracotta/Orange-Brown
-    elif summary.startswith("Миша"):
-        return (150, 60, 25), (0, 0, 0)
-    # Default -> Yellow/Mustard
-    return (210, 170, 20), (0, 0, 0)
+def get_person_from_summary(summary, unique_people):
+    for person in unique_people:
+        if summary.startswith(f"{person}:") or summary.startswith(f"{person} "):
+            return person
+    return None
 
-def split_summary_by_person(summary):
+COLOR_PALETTE = [
+    ((50, 15, 45), (255, 255, 255)),   # Burgundy, White text
+    ((150, 60, 25), (255, 255, 255)),  # Terracotta, White text
+    ((20, 80, 120), (255, 255, 255)),  # Slate Blue, White text
+    ((30, 120, 60), (255, 255, 255)),  # Forest Green, White text
+]
+DEFAULT_COLOR = ((240, 195, 30), (0, 0, 0)) # Default/Yellow
+
+def get_event_colors(summary, unique_people, person_colors):
+    """Returns (bg_color, text_color) based on the event subject dynamically."""
+    person = get_person_from_summary(summary, unique_people)
+    if person:
+        return person_colors.get(person, DEFAULT_COLOR)
+    return DEFAULT_COLOR
+
+def split_summary_by_person(summary, unique_people):
     """Splits summary into (person, event_title)"""
-    for prefix in ["София:", "Софья:", "Миша:"]:
-        if summary.startswith(prefix):
-            return prefix[:-1], summary[len(prefix):].strip()
+    person = get_person_from_summary(summary, unique_people)
+    if person:
+        prefix_len = len(person) + (2 if summary.startswith(f"{person}:") else 1)
+        return person, summary[prefix_len:].strip()
     return "", summary
 
 def draw_calendar(resolution, events, tz, today_date=None):
@@ -103,6 +114,13 @@ def draw_calendar(resolution, events, tz, today_date=None):
         now = datetime.datetime.now(tz)
         today_date = now.date()
     week_dates = [today_date + datetime.timedelta(days=i) for i in range(3)]
+    
+    # Extract unique people and assign colors dynamically
+    unique_people = extract_unique_people(events)
+    person_colors = {}
+    for idx, person in enumerate(unique_people):
+        color_idx = idx % len(COLOR_PALETTE)
+        person_colors[person] = COLOR_PALETTE[color_idx]
     
     # Group events by date, ignoring all-day events
     events_by_date = {d: [] for d in week_dates}
@@ -203,7 +221,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
         font_event_person_today = load_crisp_font(size_person, bold=True)
         font_event_title_today = load_crisp_font(size_title, bold=True)
 
-        bg_col, text_col = get_event_colors(ev["summary"])
+        bg_col, text_col = get_event_colors(ev["summary"], unique_people, person_colors)
         
         # Draw Event Card Background & Border (thick black border)
         draw.rectangle(
@@ -222,7 +240,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
         draw_sharp_text(img, (col_x_positions[0] + 24, y_start + time_y_offset), time_str, font_event_time_today, text_col)
         
         # Split prefix
-        person, title = split_summary_by_person(ev["summary"])
+        person, title = split_summary_by_person(ev["summary"], unique_people)
         if person:
             person_lbl = f"[{person.upper()}]"
             lbl_w = draw.textlength(person_lbl, font=font_event_person_today)
@@ -285,7 +303,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
                 font_size = 10
 
             font_event_other = load_crisp_font(font_size, bold=True)
-            bg_col, text_col = get_event_colors(ev["summary"])
+            bg_col, text_col = get_event_colors(ev["summary"], unique_people, person_colors)
             
             # Draw rounded pill capsule
             draw.rounded_rectangle(
@@ -296,7 +314,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
             
             # Format display string: Time first, then Person: Title
             start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
-            person, title = split_summary_by_person(ev["summary"])
+            person, title = split_summary_by_person(ev["summary"], unique_people)
             display_text = f"{start_str}  {person}: {title}" if person else f"{start_str}  {title}"
             
             # Truncate text if it exceeds horizontal space inside the pill

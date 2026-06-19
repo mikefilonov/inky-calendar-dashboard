@@ -174,6 +174,23 @@ def fetch_and_parse_events(ics_url, tz, start_date, end_date):
             
     return deduped_events
 
+def extract_unique_people(events):
+    people = set()
+    for ev in events:
+        summary = ev.get("summary", "")
+        if ":" in summary:
+            parts = summary.split(":", 1)
+            possible_person = parts[0].strip()
+            if possible_person and " " not in possible_person and len(possible_person) < 20:
+                people.add(possible_person)
+    return sorted(list(people))
+
+def get_person_from_summary(summary, unique_people):
+    for person in unique_people:
+        if summary.startswith(f"{person}:") or summary.startswith(f"{person} "):
+            return person
+    return None
+
 # Russian localization dictionaries
 RU_DAYS_FULL = {
     0: "ПОНЕДЕЛЬНИК",
@@ -210,6 +227,15 @@ def draw_calendar(resolution, events, tz):
     # Display 5 days: Today and the next 4 days
     week_dates = [today_date + datetime.timedelta(days=i) for i in range(5)]
     
+    # Extract unique people and assign text colors dynamically
+    unique_people = extract_unique_people(events)
+    # Highlight palette (Blue, Accent/Red, Text/Black)
+    COLOR_PALETTE = [COLOR_BLUE, COLOR_ACCENT, COLOR_TEXT]
+    person_colors = {}
+    for idx, person in enumerate(unique_people):
+        color_idx = idx % len(COLOR_PALETTE)
+        person_colors[person] = COLOR_PALETTE[color_idx]
+        
     # Header area
     font_title = load_font(22, bold=True)
     font_subtitle = load_font(14, bold=True)
@@ -287,12 +313,9 @@ def draw_calendar(resolution, events, tz):
                     draw_sharp_text(img, (x_events_start, ev_y), time_str, font_today_time, COLOR_ACCENT)
                     
                     summary = ev["summary"]
-                    # Assign custom color highlights: Sofia/Sofya (Blue), Misha (Black)
-                    summary_color = COLOR_TEXT
-                    if summary.startswith("София") or summary.startswith("Софья"):
-                        summary_color = COLOR_BLUE
-                    elif summary.startswith("Миша"):
-                        summary_color = COLOR_TEXT
+                    # Assign custom color highlights dynamically
+                    person = get_person_from_summary(summary, unique_people)
+                    summary_color = person_colors.get(person, COLOR_TEXT) if person else COLOR_TEXT
                         
                     draw_sharp_text(img, (x_events_start + 110, ev_y), summary, font_today_title, summary_color)
         else:
