@@ -4,6 +4,9 @@ A Python-based e-ink calendar dashboard designed for Raspberry Pi. It fetches ev
 
 ---
 
+<img width="800" height="480" alt="calendar" src="https://github.com/user-attachments/assets/6a63053d-7791-42aa-921d-74ea4dd03dee" />
+
+
 ## 🛠️ Hardware Requirements
 
 * **Raspberry Pi**: Any Raspberry Pi model with GPIO headers (e.g. Raspberry Pi 3, 4, 5, or Zero 2 W) running Raspberry Pi OS.
