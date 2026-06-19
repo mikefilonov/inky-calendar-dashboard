@@ -265,11 +265,11 @@ def draw_calendar(resolution, events, tz, today_date=None):
         if num_day > 0:
             item_spacing = 6
             # Total height space available: 192px (from y_seg_start + 32 to y_seg_start + segment_height - 2)
-            item_height = min(56, (192 - (num_day - 1) * item_spacing) // num_day)
-            item_height = max(30, item_height)
+            item_height = min(46, (192 - (num_day - 1) * item_spacing) // num_day)
+            item_height = max(26, item_height)
         else:
-            item_height = 50
-            item_spacing = 8
+            item_height = 42
+            item_spacing = 6
             
         for ev_idx, ev in enumerate(day_events):
             y_item_start = y_seg_start + 32 + ev_idx * (item_height + item_spacing)
@@ -277,50 +277,41 @@ def draw_calendar(resolution, events, tz, today_date=None):
                 break
                 
             # Font size mapping based on item_height
-            if item_height >= 50:
-                size_title_other, size_time_other = 16, 12
-                other_time_y_offset = 2
-                other_title_start_y = 20
-                other_line_height = 18
-            elif item_height >= 40:
-                size_title_other, size_time_other = 13, 11
-                other_time_y_offset = 1
-                other_title_start_y = 16
-                other_line_height = 15
+            if item_height >= 40:
+                font_size = 12
+            elif item_height >= 32:
+                font_size = 11
             else:
-                size_title_other, size_time_other = 11, 10
-                other_time_y_offset = 0
-                other_title_start_y = 12
-                other_line_height = 12
+                font_size = 10
 
-            font_event_title_other = load_crisp_font(size_title_other, bold=True)
-            font_event_time_other = load_crisp_font(size_time_other, bold=False)
-
-            accent_col, text_col = get_event_colors_non_today(ev["summary"])
+            font_event_other = load_crisp_font(font_size, bold=True)
+            bg_col, text_col = get_event_colors(ev["summary"])
             
-            # Left accent stripe
-            draw.rectangle(
-                [(col_x_positions[1] + 12, y_item_start + 2), (col_x_positions[1] + 17, y_item_start + item_height - 2)],
-                fill=accent_col
+            # Draw rounded pill capsule
+            draw.rounded_rectangle(
+                [(col_x_positions[1] + 12, y_item_start), (width - 12, y_item_start + item_height)],
+                radius=4,
+                fill=bg_col
             )
             
-            # Start time
+            # Format display string: Time first, then Person: Title
             start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
-            draw_sharp_text(img, (col_x_positions[1] + 26, y_item_start + other_time_y_offset), start_str, font_event_time_other, text_col)
-            
-            # Split summary
             person, title = split_summary_by_person(ev["summary"])
-            full_display_str = f"[{person}] {title}" if person else title
+            display_text = f"{start_str}  {person}: {title}" if person else f"{start_str}  {title}"
             
-            # Wrap and draw title
-            padded_width = col_widths[1] - 38
-            wrapped_lines = wrap_text(full_display_str, font_event_title_other, padded_width)
+            # Truncate text if it exceeds horizontal space inside the pill
+            max_text_width = width - 12 - 20 - (col_x_positions[1] + 20)  # ~276px
+            text_w = draw.textlength(display_text, font=font_event_other)
+            if text_w > max_text_width:
+                while len(display_text) > 3 and draw.textlength(display_text + "...", font=font_event_other) > max_text_width:
+                    display_text = display_text[:-1]
+                display_text = display_text + "..."
+                
+            # Centered text vertical calculation
+            bbox = draw.textbbox((0, 0), display_text, font=font_event_other)
+            text_h = bbox[3] - bbox[1]
+            text_y = y_item_start + (item_height - text_h) // 2 - bbox[1]
             
-            curr_y = y_item_start + other_title_start_y
-            for line in wrapped_lines:
-                if curr_y + other_line_height > y_item_start + item_height:
-                    break
-                draw_sharp_text(img, (col_x_positions[1] + 26, curr_y), line, font_event_title_other, text_col)
-                curr_y += other_line_height
+            draw_sharp_text(img, (col_x_positions[1] + 20, text_y), display_text, font_event_other, text_col)
                 
     return img
