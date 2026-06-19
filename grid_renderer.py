@@ -243,7 +243,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
             
             # Start time
             start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
-            draw_sharp_text(img, (col_x_positions[1] + 26, y_item_start + 2), start_str, font_event_time_other, accent_col)
+            draw_sharp_text(img, (col_x_positions[1] + 26, y_item_start + 2), start_str, font_event_time_other, text_col)
             
             # Split summary
             person, title = split_summary_by_person(ev["summary"])
