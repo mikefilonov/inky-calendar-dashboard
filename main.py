@@ -87,6 +87,14 @@ def main():
     # Fetch events
     events = calendar_renderer.fetch_and_parse_events(calendar_url, tz, start_date, end_date)
     
+    # Map real names to display names if configured (for privacy)
+    name_mappings = config.get("name_mappings", {})
+    if name_mappings:
+        for ev in events:
+            for real_name, display_name in name_mappings.items():
+                if ev["summary"].startswith(real_name):
+                    ev["summary"] = ev["summary"].replace(real_name, display_name, 1)
+    
     # Calculate state hash for change detection (date + all events)
     state_str = f"Date: {today_date}\nRenderer: {renderer_type}\n"
     for ev in events:

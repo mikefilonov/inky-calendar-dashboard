@@ -3,5 +3,9 @@
   "timezone": "America/Los_Angeles",
   "dry_run": true,
   "resolution": [800, 480],
-  "renderer": "list"
+  "renderer": "list",
+  "name_mappings": {
+    "Софья": "Маша",
+    "Миша": "Максим"
+  }
 }
