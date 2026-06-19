@@ -1,0 +1,7 @@
+{
+  "calendar_url": "https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics",
+  "timezone": "America/Los_Angeles",
+  "dry_run": true,
+  "resolution": [800, 480],
+  "renderer": "list"
+}

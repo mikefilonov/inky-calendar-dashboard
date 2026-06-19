@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+calendar.png
+config.json
+.DS_Store
+.calendar_hash
+*.ics
+scratch/
+history/
