@@ -224,8 +224,8 @@ def draw_calendar(resolution, events, tz, today_date=None):
         # Fetch events for this day
         day_events = sorted(events_by_date[day_date], key=lambda e: e["start"])
         
-        item_height = 62  # Reclaimed space allows larger list item height
-        item_spacing = 10
+        item_height = 50  # Optimized height to fit up to 3 events per day
+        item_spacing = 8
         for ev_idx, ev in enumerate(day_events):
             y_item_start = y_seg_start + 32 + ev_idx * (item_height + item_spacing)
             
