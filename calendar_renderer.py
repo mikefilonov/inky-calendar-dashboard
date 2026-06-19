@@ -167,9 +167,7 @@ def fetch_and_parse_events(ics_url, tz, start_date, end_date):
     seen = set()
     deduped_events = []
     for ev in events:
-        # Normalize spelling variations only for duplication checks to preserve original strings in output
-        norm_summary = ev["summary"].replace("Софья", "София")
-        key = (norm_summary, ev["start"], ev["all_day"])
+        key = (ev["summary"], ev["start"], ev["all_day"])
         if key not in seen:
             seen.add(key)
             deduped_events.append(ev)
@@ -289,11 +287,11 @@ def draw_calendar(resolution, events, tz):
                     draw_sharp_text(img, (x_events_start, ev_y), time_str, font_today_time, COLOR_ACCENT)
                     
                     summary = ev["summary"]
-                    # Assign custom color highlights: Sofia/Sofya (Blue), Misha (Black)
+                    # Assign custom color highlights: Alina (Blue), Maxim (Black)
                     summary_color = COLOR_TEXT
-                    if summary.startswith("София") or summary.startswith("Софья"):
+                    if summary.startswith("Алина"):
                         summary_color = COLOR_BLUE
-                    elif summary.startswith("Миша"):
+                    elif summary.startswith("Максим"):
                         summary_color = COLOR_TEXT
                         
                     draw_sharp_text(img, (x_events_start + 110, ev_y), summary, font_today_title, summary_color)

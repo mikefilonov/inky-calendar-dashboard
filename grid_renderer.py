@@ -62,10 +62,10 @@ def wrap_text(text, font, max_width):
 def get_event_colors(summary):
     """Returns (bg_color, text_color) based on the event subject."""
     # Sofia/Sofya -> Burgundy/Dark Purple
-    if summary.startswith("София") or summary.startswith("Софья"):
+    if summary.startswith("Алина"):
         return (50, 15, 45), (255, 255, 255)
     # Misha -> Terracotta/Orange-Brown
-    elif summary.startswith("Миша"):
+    elif summary.startswith("Максим"):
         return (150, 60, 25), (255, 255, 255)
     # Default -> Yellow
     return (240, 195, 30), (0, 0, 0)
@@ -73,17 +73,17 @@ def get_event_colors(summary):
 def get_event_colors_non_today(summary):
     """Returns (accent_color, text_color) for non-today text layout."""
     # Sofia/Sofya -> Burgundy/Dark Purple
-    if summary.startswith("София") or summary.startswith("Софья"):
+    if summary.startswith("Алина"):
         return (50, 15, 45), (0, 0, 0)
     # Misha -> Terracotta/Orange-Brown
-    elif summary.startswith("Миша"):
+    elif summary.startswith("Максим"):
         return (150, 60, 25), (0, 0, 0)
     # Default -> Yellow/Mustard
     return (210, 170, 20), (0, 0, 0)
 
 def split_summary_by_person(summary):
     """Splits summary into (person, event_title)"""
-    for prefix in ["София:", "Софья:", "Миша:"]:
+    for prefix in ["Алина:", "Максим:"]:
         if summary.startswith(prefix):
             return prefix[:-1], summary[len(prefix):].strip()
     return "", summary

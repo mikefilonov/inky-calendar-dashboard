@@ -122,8 +122,7 @@ def main():
     seen = set()
     deduped_events = []
     for ev in events:
-        norm_summary = ev["summary"].replace("Софья", "София")
-        key = (norm_summary, ev["start"], ev["all_day"])
+        key = (ev["summary"], ev["start"], ev["all_day"])
         if key not in seen:
             seen.add(key)
             deduped_events.append(ev)
