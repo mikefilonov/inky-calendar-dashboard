@@ -289,7 +289,7 @@ def draw_calendar(resolution, events, tz):
                     summary = ev["summary"]
                     # Assign custom color highlights: Alina (Blue), Maxim (Black)
                     summary_color = COLOR_TEXT
-                    if summary.startswith("Алина"):
+                    if summary.startswith("Маша"):
                         summary_color = COLOR_BLUE
                     elif summary.startswith("Максим"):
                         summary_color = COLOR_TEXT
