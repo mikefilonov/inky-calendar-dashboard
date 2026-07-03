@@ -129,6 +129,21 @@ def fetch_and_parse_events(ics_url, tz, start_date, end_date):
         rrule_prop = component.get("rrule")
         if rrule_prop:
             try:
+                # Parse exclusions (EXDATE)
+                exdates = []
+                exdate_prop = component.get("exdate")
+                if exdate_prop:
+                    if not isinstance(exdate_prop, list):
+                        exdate_prop = [exdate_prop]
+                    for ex_list in exdate_prop:
+                        if hasattr(ex_list, "dts"):
+                            for ex_item in ex_list.dts:
+                                ex_dt, _ = make_aware(ex_item.dt, tz)
+                                exdates.append(ex_dt)
+                        else:
+                            ex_dt, _ = make_aware(ex_list, tz)
+                            exdates.append(ex_dt)
+
                 rrule_str = rrule_prop.to_ical().decode("utf-8")
                 naive_start = start_dt.astimezone(tz).replace(tzinfo=None)
                 rule = rrule.rrulestr(rrule_str, dtstart=naive_start)
@@ -141,6 +156,8 @@ def fetch_and_parse_events(ics_url, tz, start_date, end_date):
                 
                 for occ in occurrences:
                     occ_start = tz.localize(occ)
+                    if any(occ_start == ex_dt for ex_dt in exdates):
+                        continue
                     duration = end_dt - start_dt
                     occ_end = occ_start + duration
                     events.append({
