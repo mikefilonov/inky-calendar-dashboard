@@ -71,6 +71,6 @@ For step-by-step instructions on setting up SPI/I2C interfaces, configuring virt
 
 To run locally and inspect the test render:
 ```bash
-python3 test_render.py grid
+python3 run_tests.py all
 ```
-This saves a simulated render to [calendar.png](file:///Users/mikefilonov/Documents/diy-project/inky-calendar/calendar.png).
+This runs the test suite and outputs layout previews to `tests/outputs/` and updates the default preview `calendar.png` in the project root.

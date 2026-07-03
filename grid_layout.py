@@ -1,39 +1,34 @@
-import os
 import datetime
-import calendar
 import logging
-from PIL import Image, ImageDraw, ImageFont
-import pytz
+from PIL import Image, ImageDraw
+
+from renderer_utils import (
+    load_crisp_font,
+    draw_sharp_text,
+    extract_unique_people,
+    split_summary_by_person,
+    RU_DAYS_CAPITALIZED,
+    format_ru_date_grid
+)
 
 logger = logging.getLogger(__name__)
 
-# Import font and text drawing helpers from calendar_renderer for styling parity
-from calendar_renderer import load_font, draw_sharp_text
+# Grid-specific color palettes (Blue, Green, Red, Yellow with White text)
+COLOR_PALETTE = [
+    ((0, 0, 255), (255, 255, 255)),   # Pure Blue, White text
+    ((0, 255, 0), (255, 255, 255)),   # Pure Green, White text
+    ((255, 0, 0), (255, 255, 255)),   # Pure Red, White text
+    ((255, 255, 0), (255, 255, 255)), # Pure Yellow, White text
+]
+DEFAULT_COLOR = ((255, 255, 0), (255, 255, 255)) # Pure Yellow, White text
 
-# Localization dictionaries
-RU_DAYS_FULL = {
-    0: "Понедельник", 1: "Вторник", 2: "Среда", 3: "Четверг", 4: "Пятница", 5: "Суббота", 6: "Воскресенье"
-}
-
-RU_MONTHS_GENITIVE = {
-    1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня",
-    7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
-}
-
-def format_ru_date(dt):
-    return f"{dt.day} {RU_MONTHS_GENITIVE[dt.month].capitalize()}"
-
-# Let's override font loading to prefer DejaVuSans for crisp 1-bit rendering
-def load_crisp_font(size, bold=False):
-    # Prefer DejaVuSans for 1-bit non-antialiased screens as it has superior hinting and Cyrillic glyphs
-    font_name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
-    bundled_path = os.path.join(os.path.dirname(__file__), "fonts", font_name)
-    if os.path.exists(bundled_path):
-        try:
-            return ImageFont.truetype(bundled_path, size)
-        except OSError:
-            pass
-    return load_font(size, bold)
+def get_grid_event_colors(summary, unique_people, person_colors):
+    """Returns (bg_color, text_color) based on the event subject dynamically."""
+    from renderer_utils import get_person_from_summary
+    person = get_person_from_summary(summary, unique_people)
+    if person:
+        return person_colors.get(person, DEFAULT_COLOR)
+    return DEFAULT_COLOR
 
 def wrap_text(text, font, max_width):
     """Wraps text to fit within max_width pixels using standard font metrics."""
@@ -59,47 +54,12 @@ def wrap_text(text, font, max_width):
         
     return lines
 
-def extract_unique_people(events):
-    people = set()
-    for ev in events:
-        summary = ev.get("summary", "")
-        if ":" in summary:
-            parts = summary.split(":", 1)
-            possible_person = parts[0].strip()
-            if possible_person and " " not in possible_person and len(possible_person) < 20:
-                people.add(possible_person)
-    return sorted(list(people))
-
-def get_person_from_summary(summary, unique_people):
-    for person in unique_people:
-        if summary.startswith(f"{person}:") or summary.startswith(f"{person} "):
-            return person
-    return None
-
-COLOR_PALETTE = [
-    ((0, 0, 255), (255, 255, 255)),   # Pure Blue, White text
-    ((0, 255, 0), (255, 255, 255)),   # Pure Green, White text
-    ((255, 0, 0), (255, 255, 255)),   # Pure Red, White text
-    ((255, 255, 0), (255, 255, 255)), # Pure Yellow, White text
-]
-DEFAULT_COLOR = ((255, 255, 0), (255, 255, 255)) # Pure Yellow, White text
-
-def get_event_colors(summary, unique_people, person_colors):
-    """Returns (bg_color, text_color) based on the event subject dynamically."""
-    person = get_person_from_summary(summary, unique_people)
-    if person:
-        return person_colors.get(person, DEFAULT_COLOR)
-    return DEFAULT_COLOR
-
-def split_summary_by_person(summary, unique_people):
-    """Splits summary into (person, event_title)"""
-    person = get_person_from_summary(summary, unique_people)
-    if person:
-        prefix_len = len(person) + (2 if summary.startswith(f"{person}:") else 1)
-        return person, summary[prefix_len:].strip()
-    return "", summary
-
-def draw_calendar(resolution, events, tz, today_date=None):
+def draw_grid_layout(resolution, events, today_date):
+    """
+    Renders the 2-Column grid layout (3-day view) from the parsed events list.
+    `events` should be a list of events with `start` and `end` as datetime objects.
+    `today_date` should be a datetime.date object.
+    """
     width, height = resolution
     img = Image.new("RGB", (width, height), (255, 255, 255))
     draw = ImageDraw.Draw(img)
@@ -110,9 +70,6 @@ def draw_calendar(resolution, events, tz, today_date=None):
     COLOR_HEADER_BG = (225, 225, 225)
     
     # 1. Determine Rolling 3-Day window
-    if today_date is None:
-        now = datetime.datetime.now(tz)
-        today_date = now.date()
     week_dates = [today_date + datetime.timedelta(days=i) for i in range(3)]
     
     # Extract unique people and assign colors dynamically
@@ -131,16 +88,16 @@ def draw_calendar(resolution, events, tz, today_date=None):
         if ev_day in events_by_date:
             events_by_date[ev_day].append(ev)
             
-    # Fonts (prefer loaded crisp font)
+    # Fonts
     font_day_header = load_crisp_font(13, bold=True)
     
     font_event_time_today = load_crisp_font(15, bold=False)
     font_event_person_today = load_crisp_font(16, bold=True)
-    font_event_title_today = load_crisp_font(26, bold=True)  # Upgraded to size 26 bold!
+    font_event_title_today = load_crisp_font(26, bold=True)
     
     font_event_person_other = load_crisp_font(12, bold=True)
-    font_event_title_other = load_crisp_font(16, bold=True)  # Upgraded to size 16 bold
-    font_event_time_other = load_crisp_font(12, bold=False)  # Upgraded to size 12
+    font_event_title_other = load_crisp_font(16, bold=True)
+    font_event_time_other = load_crisp_font(12, bold=False)
     
     # 3. Dynamic Column Coordinates for 2 Columns
     # Left: Today (480px), Right: Future days collapsed (308px)
@@ -148,9 +105,9 @@ def draw_calendar(resolution, events, tz, today_date=None):
     col_widths = [480, 308]
     col_x_positions = [x_hour_col_w, x_hour_col_w + 480]
         
-    y_day_header = 0  # Reclaimed space from date range header removal
+    y_day_header = 0
     y_day_header_h = 28
-    y_grid_start = y_day_header + y_day_header_h # 28
+    y_grid_start = y_day_header + y_day_header_h
     
     # Draw Background for Column Headers
     draw.rectangle([(0, y_day_header), (width, y_day_header + y_day_header_h)], fill=COLOR_HEADER_BG)
@@ -161,7 +118,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
     draw.line([(0, height - 1), (width, height - 1)], fill=COLOR_TEXT, width=1)
     
     # Draw Left Column Header (Today) with full weekday and month
-    today_lbl = f"• {RU_DAYS_FULL[today_date.weekday()]} {today_date.day} {RU_MONTHS_GENITIVE[today_date.month].capitalize()} •"
+    today_lbl = f"• {RU_DAYS_CAPITALIZED[today_date.weekday()]} {today_date.day} {format_ru_date_grid(today_date).split(' ')[1]} •"
     draw.rectangle([(col_x_positions[0] + 1, y_day_header + 1), (col_x_positions[0] + col_widths[0] - 1, y_day_header + y_day_header_h - 1)], outline=(200, 30, 30), width=2)
     text_w = draw.textlength(today_lbl, font=font_day_header)
     draw_sharp_text(img, (col_x_positions[0] + (col_widths[0] - text_w) // 2, y_day_header + 6), today_lbl, font_day_header, COLOR_TEXT)
@@ -179,7 +136,6 @@ def draw_calendar(resolution, events, tz, today_date=None):
     num_today = len(today_events)
     if num_today > 0:
         card_spacing = 10
-        # Total height space available: 436px (from y_grid_start + 12 to height - 4)
         card_height = min(112, (436 - (num_today - 1) * card_spacing) // num_today)
         card_height = max(36, card_height)
     else:
@@ -221,7 +177,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
         font_event_person_today = load_crisp_font(size_person, bold=True)
         font_event_title_today = load_crisp_font(size_title, bold=False)
 
-        bg_col, text_col = get_event_colors(ev["summary"], unique_people, person_colors)
+        bg_col, text_col = get_grid_event_colors(ev["summary"], unique_people, person_colors)
         
         # Draw Event Card Background & Border (thick black border)
         draw.rectangle(
@@ -272,8 +228,8 @@ def draw_calendar(resolution, events, tz, today_date=None):
             draw.line([(col_x_positions[1], y_seg_start), (width, y_seg_start)], fill=COLOR_GRID, width=1)
             
         # Draw sub-header day name
-        day_name = RU_DAYS_FULL[day_date.weekday()]
-        day_date_str = f"{day_date.day} {RU_MONTHS_GENITIVE[day_date.month].capitalize()}"
+        day_name = RU_DAYS_CAPITALIZED[day_date.weekday()]
+        day_date_str = format_ru_date_grid(day_date)
         sub_hdr_text = f"{day_name} • {day_date_str}"
         draw_sharp_text(img, (col_x_positions[1] + 12, y_seg_start + 8), sub_hdr_text, font_event_person_other, COLOR_TEXT)
         
@@ -282,7 +238,6 @@ def draw_calendar(resolution, events, tz, today_date=None):
         num_day = len(day_events)
         if num_day > 0:
             item_spacing = 2
-            # Total height space available: 192px (from y_seg_start + 32 to y_seg_start + segment_height - 2)
             item_height = min(18, (192 - (num_day - 1) * item_spacing) // num_day)
             item_height = max(13, item_height)
         else:
@@ -303,7 +258,7 @@ def draw_calendar(resolution, events, tz, today_date=None):
                 font_size = 9
 
             font_event_other = load_crisp_font(font_size, bold=True)
-            bg_col, _ = get_event_colors(ev["summary"], unique_people, person_colors)
+            bg_col, _ = get_grid_event_colors(ev["summary"], unique_people, person_colors)
             
             # Format display string: Time first, then Person: Title
             start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
@@ -325,11 +280,10 @@ def draw_calendar(resolution, events, tz, today_date=None):
 
             # Calculate precise center of capital letters/digits to align the circle
             cap_bbox = draw.textbbox((0, 0), "H0", font=font_event_other)
-            # Since the text is drawn at text_y (origin), its uppercase visual center is at text_y + average of top and bottom of H0
             y_center = int(round(text_y + (cap_bbox[1] + cap_bbox[3]) / 2.0))
 
             # Draw a colored circle (bullet) on the left of the event, aligned with text
-            r = 3  # Compact circle radius
+            r = 3
             draw.ellipse(
                 [(col_x_positions[1] + 12, y_center - r), (col_x_positions[1] + 12 + 2*r, y_center + r)],
                 fill=bg_col

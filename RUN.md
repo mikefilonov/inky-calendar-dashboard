@@ -6,7 +6,7 @@ This document guides you on how to set up your local development environment, ru
 
 ## 💻 Local Development Setup (Offline Rendering)
 
-For fast development cycles, you can run the calendar engine offline on your computer. It reads calendar event data from local `.ics` files (e.g., `family.ics` or `live_family.ics`) and generates a `calendar.png` image preview.
+For fast development cycles, you can run the calendar engine offline on your computer. It reads calendar event data from the anonymized test calendar file (`tests/data/test_calendar.ics`) and generates layout previews.
 
 1. **Create and activate a virtual environment**:
    ```bash
@@ -19,13 +19,14 @@ For fast development cycles, you can run the calendar engine offline on your com
    pip install -r requirements.txt
    ```
 
-3. **Run the offline test render**:
+3. **Run the offline test suite and generate previews**:
    ```bash
-   python3 test_render.py grid   # Generate the 2-Column layout
-   # OR
-   python3 test_render.py list   # Generate the list layout
+   python3 run_tests.py all
    ```
-   This will output the rendered preview image to `calendar.png` in the project root.
+   This will parse the test data and output layout previews:
+   - Grid layout: `tests/outputs/test_calendar_render_grid.png`
+   - List layout: `tests/outputs/test_calendar_render_list.png`
+   - Default preview (Grid): `calendar.png` (in root directory)
 
 ---
 

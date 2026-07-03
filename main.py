@@ -3,15 +3,19 @@ import sys
 import json
 import logging
 import datetime
-from PIL import Image
 import pytz
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("inky-calendar")
+import hashlib
 
 # Add current dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import calendar_renderer
+
+import calendar_fetcher
+import ics_parser
+import layout_renderer
+import display_controller
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("inky-calendar")
 
 def load_config():
     config_path = os.path.join(os.path.dirname(__file__), "config.json")
@@ -21,39 +25,6 @@ def load_config():
         
     with open(config_path, "r") as f:
         return json.load(f)
-
-def update_display(img, dry_run):
-    import image_logger
-    image_logger.save_and_rotate_image(img, os.path.dirname(__file__))
-
-    if dry_run:
-        print("Dry run enabled. Calendar preview saved.")
-        return
-
-    try:
-        from inky.auto import auto
-        logger.info("Initializing Inky display...")
-        inky_display = auto(ask_user=False, verbose=True)
-        
-        # Verify resolution
-        display_w, display_h = inky_display.resolution
-        img_w, img_h = img.size
-        
-        if (display_w, display_h) != (img_w, img_h):
-            logger.info(f"Resizing rendered image from {img.size} to display resolution {inky_display.resolution}...")
-            img = img.resize(inky_display.resolution, Image.Resampling.LANCZOS)
-            
-        inky_display.set_image(img, saturation=0.5)
-        logger.info("Refreshing Inky display...")
-        inky_display.show()
-        logger.info("Display update complete!")
-        
-    except ImportError:
-        logger.warning("The 'inky' library could not be imported (expected on non-Raspberry Pi environments).")
-        print(f"Library fallback: Calendar preview saved to {output_path}")
-    except Exception as e:
-        logger.error(f"Failed to update Inky display: {e}")
-        print(f"Error occurred. Rendered image saved as fallback to {output_path}")
 
 def main():
     try:
@@ -78,24 +49,36 @@ def main():
     dry_run = config.get("dry_run", True)
     renderer_type = config.get("renderer", "list")
     
-    # Calculate dates based on selected renderer (both now use rolling 3 days)
+    # Calculate dates based on selected renderer:
+    # list layout displays 5 days (today + next 4 days)
+    # grid layout displays 3 days (today + next 2 days)
     now = datetime.datetime.now(tz)
     today_date = now.date()
     start_date = today_date
-    end_date = today_date + datetime.timedelta(days=2)
     
-    # Fetch events
-    events = calendar_renderer.fetch_and_parse_events(calendar_url, tz, start_date, end_date)
+    if renderer_type == "grid":
+        end_date = today_date + datetime.timedelta(days=2)
+    else:
+        end_date = today_date + datetime.timedelta(days=4)
     
-    # Calculate state hash for change detection (date + all events)
+    # 1. Fetch raw ICS calendar data
+    try:
+        ical_data = calendar_fetcher.fetch_ics(calendar_url)
+    except Exception as e:
+        logger.error(f"Failed to fetch calendar: {e}")
+        sys.exit(1)
+        
+    # 2. Parse ICS to representation spec
+    spec = ics_parser.parse_ics_to_spec(ical_data, timezone_name, start_date, end_date)
+    
+    # 3. Calculate state hash for change detection
     state_str = f"Date: {today_date}\nRenderer: {renderer_type}\n"
-    for ev in events:
+    for ev in spec["events"]:
         state_str += f"{ev['summary']}|{ev['start']}|{ev['end']}|{ev['all_day']}\n"
-    import hashlib
+    
     current_hash = hashlib.sha256(state_str.encode('utf-8')).hexdigest()
     
     hash_file_path = os.path.join(os.path.dirname(__file__), ".calendar_hash")
-    
     previous_hash = None
     if os.path.exists(hash_file_path):
         try:
@@ -106,13 +89,10 @@ def main():
             
     force_update = "--force" in sys.argv
     
-    # Draw calendar
-    if renderer_type == "grid":
-        import grid_renderer
-        img = grid_renderer.draw_calendar(resolution, events, tz)
-    else:
-        img = calendar_renderer.draw_calendar(resolution, events, tz)
+    # 4. Render spec to PIL Image
+    img = layout_renderer.render_layout(spec, resolution, renderer_type)
     
+    # 5. Check if we can skip screen refresh (preserves e-ink life)
     if not dry_run and not force_update and previous_hash == current_hash:
         logger.info("No changes in calendar events or current date. Skipping Inky display refresh to preserve screen life.")
         # Still update the local calendar.png copy
@@ -123,10 +103,10 @@ def main():
             pass
         return
     
-    # Send to display or file
-    update_display(img, dry_run)
+    # 6. Update physical display
+    display_controller.update_display(img, dry_run)
     
-    # Save the new hash after successful update
+    # 7. Save the new hash after successful update
     if not dry_run:
         try:
             with open(hash_file_path, "w") as f:

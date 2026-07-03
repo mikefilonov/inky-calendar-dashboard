@@ -5,6 +5,8 @@ calendar.png
 config.json
 .DS_Store
 .calendar_hash
-*.ics
+/*.ics
 scratch/
 history/
+tests/outputs/
+tests/specs/
