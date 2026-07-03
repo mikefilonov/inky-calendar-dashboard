@@ -77,12 +77,12 @@ def get_person_from_summary(summary, unique_people):
     return None
 
 COLOR_PALETTE = [
-    ((50, 15, 45), (255, 255, 255)),   # Burgundy, White text
-    ((150, 60, 25), (255, 255, 255)),  # Terracotta, White text
-    ((20, 80, 120), (255, 255, 255)),  # Slate Blue, White text
-    ((30, 120, 60), (255, 255, 255)),  # Forest Green, White text
+    ((0, 0, 255), (255, 255, 255)),   # Pure Blue, White text
+    ((0, 255, 0), (255, 255, 255)),   # Pure Green, White text
+    ((255, 0, 0), (255, 255, 255)),   # Pure Red, White text
+    ((255, 255, 0), (255, 255, 255)), # Pure Yellow, White text
 ]
-DEFAULT_COLOR = ((240, 195, 30), (0, 0, 0)) # Default/Yellow
+DEFAULT_COLOR = ((255, 255, 0), (255, 255, 255)) # Pure Yellow, White text
 
 def get_event_colors(summary, unique_people, person_colors):
     """Returns (bg_color, text_color) based on the event subject dynamically."""
@@ -281,13 +281,13 @@ def draw_calendar(resolution, events, tz, today_date=None):
         day_events = sorted(events_by_date[day_date], key=lambda e: e["start"])
         num_day = len(day_events)
         if num_day > 0:
-            item_spacing = 4
+            item_spacing = 2
             # Total height space available: 192px (from y_seg_start + 32 to y_seg_start + segment_height - 2)
-            item_height = min(36, (192 - (num_day - 1) * item_spacing) // num_day)
-            item_height = max(22, item_height)
+            item_height = min(18, (192 - (num_day - 1) * item_spacing) // num_day)
+            item_height = max(13, item_height)
         else:
-            item_height = 32
-            item_spacing = 4
+            item_height = 16
+            item_spacing = 2
             
         for ev_idx, ev in enumerate(day_events):
             y_item_start = y_seg_start + 32 + ev_idx * (item_height + item_spacing)
@@ -295,31 +295,23 @@ def draw_calendar(resolution, events, tz, today_date=None):
                 break
                 
             # Font size mapping based on item_height
-            if item_height >= 34:
-                font_size = 12
-            elif item_height >= 26:
+            if item_height >= 18:
                 font_size = 11
-            else:
+            elif item_height >= 15:
                 font_size = 10
+            else:
+                font_size = 9
 
             font_event_other = load_crisp_font(font_size, bold=True)
             bg_col, _ = get_event_colors(ev["summary"], unique_people, person_colors)
-            
-            # Draw a colored circle (bullet) on the left of the event
-            r = 3 if item_height < 28 else 4  # Circle radius based on compact height
-            y_center = y_item_start + item_height // 2
-            draw.ellipse(
-                [(col_x_positions[1] + 14, y_center - r), (col_x_positions[1] + 14 + 2*r, y_center + r)],
-                fill=bg_col
-            )
             
             # Format display string: Time first, then Person: Title
             start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
             person, title = split_summary_by_person(ev["summary"], unique_people)
             display_text = f"{start_str}  {person}: {title}" if person else f"{start_str}  {title}"
             
-            # Truncate text if it exceeds horizontal space (offset is now 28px from the divider to clear the circle)
-            max_text_width = width - 12 - 28 - (col_x_positions[1] + 28)
+            # Truncate text if it exceeds horizontal space (offset is now 26px from the divider to clear the circle)
+            max_text_width = width - 12 - 26 - (col_x_positions[1] + 26)
             text_w = draw.textlength(display_text, font=font_event_other)
             if text_w > max_text_width:
                 while len(display_text) > 3 and draw.textlength(display_text + "...", font=font_event_other) > max_text_width:
@@ -330,7 +322,19 @@ def draw_calendar(resolution, events, tz, today_date=None):
             bbox = draw.textbbox((0, 0), display_text, font=font_event_other)
             text_h = bbox[3] - bbox[1]
             text_y = y_item_start + (item_height - text_h) // 2 - bbox[1]
+
+            # Calculate precise center of capital letters/digits to align the circle
+            cap_bbox = draw.textbbox((0, 0), "H0", font=font_event_other)
+            # Since the text is drawn at text_y (origin), its uppercase visual center is at text_y + average of top and bottom of H0
+            y_center = int(round(text_y + (cap_bbox[1] + cap_bbox[3]) / 2.0))
+
+            # Draw a colored circle (bullet) on the left of the event, aligned with text
+            r = 3  # Compact circle radius
+            draw.ellipse(
+                [(col_x_positions[1] + 12, y_center - r), (col_x_positions[1] + 12 + 2*r, y_center + r)],
+                fill=bg_col
+            )
             
-            draw_sharp_text(img, (col_x_positions[1] + 28, text_y), display_text, font_event_other, COLOR_TEXT)
+            draw_sharp_text(img, (col_x_positions[1] + 24, text_y), display_text, font_event_other, COLOR_TEXT)
                 
     return img
