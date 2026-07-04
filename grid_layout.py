@@ -8,19 +8,20 @@ from renderer_utils import (
     extract_unique_people,
     split_summary_by_person,
     RU_DAYS_CAPITALIZED,
-    format_ru_date_grid
+    format_ru_date_grid,
+    get_person_from_summary
 )
 
 logger = logging.getLogger(__name__)
 
-# Grid-specific color palettes (Blue, Green, Red, Yellow with White text)
+# Grid-specific color palettes (Blue, Green, Red, Yellow with White/Black text)
 COLOR_PALETTE = [
     ((0, 0, 255), (255, 255, 255)),   # Pure Blue, White text
     ((0, 255, 0), (255, 255, 255)),   # Pure Green, White text
     ((255, 0, 0), (255, 255, 255)),   # Pure Red, White text
-    ((255, 255, 0), (255, 255, 255)), # Pure Yellow, White text
+    ((255, 255, 0), (0, 0, 0)),       # Pure Yellow, Black text
 ]
-DEFAULT_COLOR = ((255, 255, 0), (255, 255, 255)) # Pure Yellow, White text
+DEFAULT_COLOR = ((255, 255, 0), (0, 0, 0)) # Pure Yellow, Black text
 
 def get_grid_event_colors(summary, unique_people, person_colors):
     """Returns (bg_color, text_color) based on the event subject dynamically."""
@@ -54,30 +55,30 @@ def wrap_text(text, font, max_width):
         
     return lines
 
-def draw_grid_layout(resolution, events, today_date):
+def draw_grid_layout(resolution, events, today_date, person_colors=None, now=None):
     """
     Renders the 2-Column grid layout (3-day view) from the parsed events list.
     `events` should be a list of events with `start` and `end` as datetime objects.
     `today_date` should be a datetime.date object.
     """
+    if person_colors is None:
+        person_colors = {}
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
     width, height = resolution
     img = Image.new("RGB", (width, height), (255, 255, 255))
     draw = ImageDraw.Draw(img)
     
-    # Core Colors
-    COLOR_GRID = (180, 180, 180)
+    # Core Colors (pure black/white for high-contrast e-ink, no grays)
+    COLOR_GRID = (0, 0, 0)
     COLOR_TEXT = (0, 0, 0)
-    COLOR_HEADER_BG = (225, 225, 225)
+    COLOR_HEADER_BG = (255, 255, 255)
     
     # 1. Determine Rolling 3-Day window
     week_dates = [today_date + datetime.timedelta(days=i) for i in range(3)]
     
-    # Extract unique people and assign colors dynamically
-    unique_people = extract_unique_people(events)
-    person_colors = {}
-    for idx, person in enumerate(unique_people):
-        color_idx = idx % len(COLOR_PALETTE)
-        person_colors[person] = COLOR_PALETTE[color_idx]
+    unique_people = list(person_colors.keys())
     
     # Group events by date, ignoring all-day events
     events_by_date = {d: [] for d in week_dates}
@@ -112,24 +113,29 @@ def draw_grid_layout(resolution, events, today_date):
     # Draw Background for Column Headers
     draw.rectangle([(0, y_day_header), (width, y_day_header + y_day_header_h)], fill=COLOR_HEADER_BG)
     
-    # Draw Borders
-    draw.line([(0, y_day_header), (width, y_day_header)], fill=COLOR_TEXT, width=2)
-    draw.line([(0, y_grid_start), (width, y_grid_start)], fill=COLOR_TEXT, width=2)
-    draw.line([(0, height - 1), (width, height - 1)], fill=COLOR_TEXT, width=1)
+    # Draw Borders (using soft COLOR_GRID)
+    draw.line([(0, y_day_header), (width, y_day_header)], fill=COLOR_GRID, width=1)
+    draw.line([(0, y_grid_start), (width, y_grid_start)], fill=COLOR_GRID, width=1)
+    draw.line([(0, height - 1), (width, height - 1)], fill=COLOR_GRID, width=1)
     
-    # Draw Left Column Header (Today) with full weekday and month
-    today_lbl = f"• {RU_DAYS_CAPITALIZED[today_date.weekday()]} {today_date.day} {format_ru_date_grid(today_date).split(' ')[1]} •"
-    draw.rectangle([(col_x_positions[0] + 1, y_day_header + 1), (col_x_positions[0] + col_widths[0] - 1, y_day_header + y_day_header_h - 1)], outline=(200, 30, 30), width=2)
+    # Draw Left Column Header (Today) as a clean red pill tag
+    today_lbl = f" {RU_DAYS_CAPITALIZED[today_date.weekday()]} {today_date.day} {format_ru_date_grid(today_date).split(' ')[1]} ".upper()
     text_w = draw.textlength(today_lbl, font=font_day_header)
-    draw_sharp_text(img, (col_x_positions[0] + (col_widths[0] - text_w) // 2, y_day_header + 6), today_lbl, font_day_header, COLOR_TEXT)
+    pill_w = text_w + 16
+    pill_x0 = col_x_positions[0] + (col_widths[0] - pill_w) // 2
+    pill_x1 = pill_x0 + pill_w
+    pill_y0 = y_day_header + 4
+    pill_y1 = y_day_header + y_day_header_h - 4
+    draw.rounded_rectangle([(pill_x0, pill_y0), (pill_x1, pill_y1)], radius=6, fill=(200, 30, 30))
+    draw_sharp_text(img, (pill_x0 + 8, y_day_header + 5), today_lbl, font_day_header, (255, 255, 255))
     
     # Draw Right Column Header (Future Days)
     future_lbl = "ПРЕДСТОЯЩИЕ ДНИ"
     text_w = draw.textlength(future_lbl, font=font_day_header)
     draw_sharp_text(img, (col_x_positions[1] + (col_widths[1] - text_w) // 2, y_day_header + 6), future_lbl, font_day_header, COLOR_TEXT)
     
-    # Vertical divider line separating the two main columns
-    draw.line([(col_x_positions[1], y_day_header), (col_x_positions[1], height)], fill=COLOR_TEXT, width=2)
+    # Vertical divider line separating the two main columns (using soft COLOR_GRID)
+    draw.line([(col_x_positions[1], y_day_header), (col_x_positions[1], height)], fill=COLOR_GRID, width=1)
     
     # 4. Draw Today's Column (Left Column)
     today_events = sorted(events_by_date[today_date], key=lambda e: e["start"])
@@ -149,58 +155,116 @@ def draw_grid_layout(resolution, events, today_date):
             
         # Determine sizes dynamically based on card_height to ensure text fits
         if card_height >= 95:
-            size_title, size_time, size_person = 26, 15, 16
-            time_y_offset = 8
+            size_title, size_person = 26, 16
+            size_start_time, size_end_time = 18, 12
+            time_y_offset = 6
             person_y_offset = 7
             title_start_y = 36
             line_height = 28
         elif card_height >= 75:
-            size_title, size_time, size_person = 20, 13, 14
-            time_y_offset = 6
+            size_title, size_person = 20, 14
+            size_start_time, size_end_time = 16, 11
+            time_y_offset = 5
             person_y_offset = 5
             title_start_y = 28
             line_height = 22
         elif card_height >= 52:
-            size_title, size_time, size_person = 16, 11, 12
-            time_y_offset = 4
+            size_title, size_person = 16, 12
+            size_start_time, size_end_time = 13, 9
+            time_y_offset = 3
             person_y_offset = 3
             title_start_y = 20
             line_height = 18
         else:
-            size_title, size_time, size_person = 13, 10, 10
-            time_y_offset = 2
+            size_title, size_person = 13, 10
+            size_start_time, size_end_time = 11, 8
+            time_y_offset = 1
             person_y_offset = 2
             title_start_y = 14
             line_height = 13
 
-        font_event_time_today = load_crisp_font(size_time, bold=False)
+        font_event_start_today = load_crisp_font(size_start_time, bold=True)
+        font_event_end_today = load_crisp_font(size_end_time, bold=False)
         font_event_person_today = load_crisp_font(size_person, bold=True)
         font_event_title_today = load_crisp_font(size_title, bold=False)
 
-        bg_col, text_col = get_grid_event_colors(ev["summary"], unique_people, person_colors)
-        
-        # Draw Event Card Background & Border (thick black border)
-        draw.rectangle(
-            [(col_x_positions[0] + 10, y_start), (col_x_positions[0] + col_widths[0] - 10, y_start + card_height)],
-            fill=bg_col,
-            outline=COLOR_TEXT,
-            width=2
-        )
+        # Determine event status
+        is_soon = False
+        if not ev["all_day"] and now is not None:
+            ev_start = ev["start"]
+            ev_start_utc = ev_start.astimezone(datetime.timezone.utc) if ev_start.tzinfo else ev_start.replace(tzinfo=datetime.timezone.utc)
+            now_utc = now.astimezone(datetime.timezone.utc) if now.tzinfo else now.replace(tzinfo=datetime.timezone.utc)
+            time_diff = (ev_start_utc - now_utc).total_seconds()
+            is_soon = (0 <= time_diff <= 3600)
+            
+        person = get_person_from_summary(ev["summary"], unique_people)
+        if person:
+            person_bg, person_fg = person_colors.get(person, DEFAULT_COLOR)
+        else:
+            person_bg, person_fg = DEFAULT_COLOR
+            
+        if is_soon:
+            # Filled Card
+            bg_col = person_bg
+            outline_col = person_bg
+            text_col = person_fg
+            
+            # Draw Rounded Event Card
+            draw.rounded_rectangle(
+                [(col_x_positions[0] + 10, y_start), (col_x_positions[0] + col_widths[0] - 10, y_start + card_height)],
+                radius=6,
+                fill=bg_col,
+                outline=outline_col,
+                width=2
+            )
+        else:
+            # Option 1: 1px black border + rounded color bar on the left (pure white card background)
+            bg_col = (255, 255, 255)
+            text_col = COLOR_TEXT
+            
+            draw.rounded_rectangle(
+                [(col_x_positions[0] + 10, y_start), (col_x_positions[0] + col_widths[0] - 10, y_start + card_height)],
+                radius=6,
+                fill=bg_col,
+                outline=(0, 0, 0),
+                width=1
+            )
+            draw.rounded_rectangle(
+                [(col_x_positions[0] + 12, y_start + 2), (col_x_positions[0] + 20, y_start + card_height - 2)],
+                radius=3,
+                fill=person_bg
+            )
         
         # Format time range
         start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
         end_str = ev["end"].strftime("%I:%M %p").lstrip("0")
-        time_str = f"{start_str} - {end_str}"
         
         # Time label at top-left
-        draw_sharp_text(img, (col_x_positions[0] + 24, y_start + time_y_offset), time_str, font_event_time_today, text_col)
+        start_x = col_x_positions[0] + 24
+        start_y = y_start + time_y_offset
+        draw_sharp_text(img, (start_x, start_y), start_str, font_event_start_today, text_col)
+        
+        # Draw end time next to it in smaller font
+        start_w = draw.textlength(start_str, font=font_event_start_today)
+        draw_sharp_text(img, (start_x + start_w + 5, start_y + (size_start_time - size_end_time) // 2), f"- {end_str}", font_event_end_today, text_col)
         
         # Split prefix
         person, title = split_summary_by_person(ev["summary"], unique_people)
         if person:
-            person_lbl = f"[{person.upper()}]"
+            # Draw solid rounded tag instead of plain text brackets
+            person_lbl = person.upper()
             lbl_w = draw.textlength(person_lbl, font=font_event_person_today)
-            draw_sharp_text(img, (col_x_positions[0] + col_widths[0] - 24 - lbl_w, y_start + person_y_offset), person_lbl, font_event_person_today, text_col)
+            tag_h = size_person + 4
+            tag_x1 = col_x_positions[0] + col_widths[0] - 24
+            tag_x0 = tag_x1 - lbl_w - 10
+            tag_y0 = y_start + person_y_offset - 2
+            tag_y1 = tag_y0 + tag_h
+            
+            tag_bg = person_bg
+            tag_fg = person_fg
+            
+            draw.rounded_rectangle([(tag_x0, tag_y0), (tag_x1, tag_y1)], radius=4, fill=tag_bg)
+            draw_sharp_text(img, (tag_x0 + 5, tag_y0 + 2), person_lbl, font_event_person_today, tag_fg)
             
         # Wrap and draw title
         padded_width = col_widths[0] - 48
@@ -257,38 +321,50 @@ def draw_grid_layout(resolution, events, today_date):
             else:
                 font_size = 9
 
-            font_event_other = load_crisp_font(font_size, bold=True)
-            bg_col, _ = get_grid_event_colors(ev["summary"], unique_people, person_colors)
+            font_time = load_crisp_font(font_size, bold=False)
+            font_title = load_crisp_font(font_size, bold=True)
+            font_tag = load_crisp_font(font_size - 1, bold=True)
             
-            # Format display string: Time first, then Person: Title
+            # Format display string
             start_str = ev["start"].strftime("%I:%M %p").lstrip("0")
             person, title = split_summary_by_person(ev["summary"], unique_people)
-            display_text = f"{start_str}  {person}: {title}" if person else f"{start_str}  {title}"
             
-            # Truncate text if it exceeds horizontal space (offset is now 26px from the divider to clear the circle)
-            max_text_width = width - 12 - 26 - (col_x_positions[1] + 26)
-            text_w = draw.textlength(display_text, font=font_event_other)
-            if text_w > max_text_width:
-                while len(display_text) > 3 and draw.textlength(display_text + "...", font=font_event_other) > max_text_width:
-                    display_text = display_text[:-1]
-                display_text = display_text + "..."
-                
             # Centered text vertical calculation
-            bbox = draw.textbbox((0, 0), display_text, font=font_event_other)
+            bbox = draw.textbbox((0, 0), "H0", font=font_time)
             text_h = bbox[3] - bbox[1]
             text_y = y_item_start + (item_height - text_h) // 2 - bbox[1]
-
-            # Calculate precise center of capital letters/digits to align the circle
-            cap_bbox = draw.textbbox((0, 0), "H0", font=font_event_other)
-            y_center = int(round(text_y + (cap_bbox[1] + cap_bbox[3]) / 2.0))
-
-            # Draw a colored circle (bullet) on the left of the event, aligned with text
-            r = 3
-            draw.ellipse(
-                [(col_x_positions[1] + 12, y_center - r), (col_x_positions[1] + 12 + 2*r, y_center + r)],
-                fill=bg_col
-            )
             
-            draw_sharp_text(img, (col_x_positions[1] + 24, text_y), display_text, font_event_other, COLOR_TEXT)
+            # 1. Draw start time
+            x_cursor = col_x_positions[1] + 12
+            draw_sharp_text(img, (x_cursor, text_y), start_str, font_time, COLOR_TEXT)
+            x_cursor += draw.textlength(start_str, font=font_time) + 6
+            
+            # 2. Draw Pill Tag (if person exists)
+            if person:
+                bg_col, fg_col = person_colors.get(person, DEFAULT_COLOR)
+                tag_lbl = person.upper()
+                tag_text_w = draw.textlength(tag_lbl, font=font_tag)
+                tag_w = tag_text_w + 8
+                tag_h = font_size + 2
+                
+                tx0 = x_cursor
+                tx1 = tx0 + tag_w
+                ty0 = text_y - 1
+                ty1 = ty0 + tag_h
+                
+                draw.rounded_rectangle([(tx0, ty0), (tx1, ty1)], radius=3, fill=bg_col)
+                draw_sharp_text(img, (tx0 + 4, ty0 + 1), tag_lbl, font_tag, fg_col)
+                x_cursor += tag_w + 6
+                
+            # 3. Draw Event Title (truncated to fit)
+            max_w = width - 12 - x_cursor
+            title_text = title
+            title_w = draw.textlength(title_text, font=font_title)
+            if title_w > max_w:
+                while len(title_text) > 3 and draw.textlength(title_text + "...", font=font_title) > max_w:
+                    title_text = title_text[:-1]
+                title_text = title_text + "..."
+                
+            draw_sharp_text(img, (x_cursor, text_y), title_text, font_title, COLOR_TEXT)
                 
     return img

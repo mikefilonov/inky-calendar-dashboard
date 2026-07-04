@@ -3,5 +3,10 @@
   "timezone": "America/Los_Angeles",
   "dry_run": true,
   "resolution": [800, 480],
-  "renderer": "list"
+  "renderer": "list",
+  "person_colors": {
+    "Анна": "red",
+    "Иван": "blue",
+    "Мама": "green"
+  }
 }

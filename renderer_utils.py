@@ -144,3 +144,91 @@ def format_ru_date_list(dt):
 
 def format_ru_date_grid(dt):
     return f"{dt.day} {RU_MONTHS[dt.month].capitalize()}"
+
+def assign_colors_to_people(unique_people, config_colors):
+    """
+    Assigns colors to names from config_colors (if specified) or dynamic defaults.
+    Ensures defined names always use the same color, and unknown names use unused palette colors.
+    Returns:
+        (dict, dict): (assigned_list_colors, assigned_grid_colors)
+        - list: mapping of person -> RGB tuple
+        - grid: mapping of person -> (bg_RGB_tuple, fg_RGB_tuple)
+    """
+    standard_palette = ["blue", "red", "green", "yellow", "orange"]
+    
+    grid_colors = {
+        "blue": ((0, 0, 255), (255, 255, 255)),
+        "red": ((255, 0, 0), (255, 255, 255)),
+        "green": ((0, 255, 0), (255, 255, 255)),
+        "yellow": ((255, 255, 0), (0, 0, 0)),
+        "orange": ((255, 165, 0), (255, 255, 255)),
+        "black": ((0, 0, 0), (255, 255, 255)),
+        "white": ((255, 255, 255), (0, 0, 0))
+    }
+    
+    list_colors = {
+        "blue": (0, 0, 230),
+        "red": (230, 30, 30),
+        "green": (0, 150, 0),
+        "yellow": (200, 160, 0),
+        "orange": (230, 100, 0),
+        "black": (0, 0, 0),
+        "white": (180, 180, 180)
+    }
+    
+    def parse_color(c):
+        if isinstance(c, str):
+            c_lower = c.lower()
+            if c_lower in grid_colors:
+                return c_lower, grid_colors[c_lower][0], grid_colors[c_lower][1], list_colors[c_lower]
+            if c.startswith("#"):
+                try:
+                    r = int(c[1:3], 16)
+                    g = int(c[3:5], 16)
+                    b = int(c[5:7], 16)
+                    rgb = (r, g, b)
+                    lum = 0.299 * r + 0.587 * g + 0.114 * b
+                    text_color = (0, 0, 0) if lum > 128 else (255, 255, 255)
+                    return c, rgb, text_color, rgb
+                except Exception:
+                    pass
+        elif isinstance(c, (list, tuple)) and len(c) == 3:
+            rgb = tuple(c)
+            lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+            text_color = (0, 0, 0) if lum > 128 else (255, 255, 255)
+            return tuple(c), rgb, text_color, rgb
+        return "red", grid_colors["red"][0], grid_colors["red"][1], list_colors["red"]
+        
+    assigned_list_colors = {}
+    assigned_grid_colors = {}
+    
+    used_palette_names = set()
+    
+    # 1. Assign configuration colors first
+    if config_colors:
+        for person in unique_people:
+            if person in config_colors:
+                color_val = config_colors[person]
+                name_or_val, grid_bg, grid_fg, list_c = parse_color(color_val)
+                assigned_grid_colors[person] = (grid_bg, grid_fg)
+                assigned_list_colors[person] = list_c
+                if isinstance(name_or_val, str) and name_or_val in standard_palette:
+                    used_palette_names.add(name_or_val)
+                    
+    # 2. Assign unused standard palette colors to the rest
+    unused_palette_names = [c for c in standard_palette if c not in used_palette_names]
+    
+    unused_idx = 0
+    for person in unique_people:
+        if person not in assigned_grid_colors:
+            if unused_idx < len(unused_palette_names):
+                color_name = unused_palette_names[unused_idx]
+                unused_idx += 1
+            else:
+                color_name = standard_palette[unused_idx % len(standard_palette)]
+                unused_idx += 1
+                
+            assigned_grid_colors[person] = grid_colors[color_name]
+            assigned_list_colors[person] = list_colors[color_name]
+            
+    return assigned_list_colors, assigned_grid_colors

@@ -13,12 +13,17 @@ from renderer_utils import (
 
 logger = logging.getLogger(__name__)
 
-def draw_list_layout(resolution, events, today_date):
+def draw_list_layout(resolution, events, today_date, person_colors=None, now=None):
     """
     Renders the chronological list layout (5-day view) from the parsed events list.
     `events` should be a list of events with `start` and `end` as datetime objects.
     `today_date` should be a datetime.date object.
     """
+    if person_colors is None:
+        person_colors = {}
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+
     width, height = resolution
     img = Image.new("RGB", (width, height), (255, 255, 255))
     draw = ImageDraw.Draw(img)
@@ -32,14 +37,7 @@ def draw_list_layout(resolution, events, today_date):
     # Display 5 days: Today and the next 4 days
     week_dates = [today_date + datetime.timedelta(days=i) for i in range(5)]
     
-    # Extract unique people and assign text colors dynamically
-    unique_people = extract_unique_people(events)
-    # Highlight palette (Blue, Accent/Red, Text/Black)
-    COLOR_PALETTE = [COLOR_BLUE, COLOR_ACCENT, COLOR_TEXT]
-    person_colors = {}
-    for idx, person in enumerate(unique_people):
-        color_idx = idx % len(COLOR_PALETTE)
-        person_colors[person] = COLOR_PALETTE[color_idx]
+    unique_people = list(person_colors.keys())
         
     # Header area
     font_title = load_font(22, bold=True)
@@ -113,16 +111,55 @@ def draw_list_layout(resolution, events, today_date):
                 for idx, ev in enumerate(day_events[:4]):
                     ev_y = y_cursor + 12 + (idx * 38)
                     
+                    summary = ev["summary"]
+                    person = get_person_from_summary(summary, unique_people)
+                    
+                    # Determine event status
+                    is_soon = False
+                    if not ev["all_day"] and now is not None:
+                        # Timezone safe check
+                        ev_start = ev["start"]
+                        ev_start_utc = ev_start.astimezone(datetime.timezone.utc) if ev_start.tzinfo else ev_start.replace(tzinfo=datetime.timezone.utc)
+                        now_utc = now.astimezone(datetime.timezone.utc) if now.tzinfo else now.replace(tzinfo=datetime.timezone.utc)
+                        time_diff = (ev_start_utc - now_utc).total_seconds()
+                        is_soon = (0 <= time_diff <= 3600)
+                    
+                    # Set colors
+                    if person:
+                        person_color = person_colors.get(person, COLOR_TEXT)
+                    else:
+                        person_color = COLOR_TEXT
+                        
+                    if is_soon:
+                        # Filled card
+                        fill_color = person_color if person else COLOR_ACCENT
+                        outline_color = fill_color
+                        # Calculate text color based on luminance
+                        lum = 0.299 * fill_color[0] + 0.587 * fill_color[1] + 0.114 * fill_color[2]
+                        text_color = (0, 0, 0) if lum > 128 else (255, 255, 255)
+                        
+                        # Draw rounded event box
+                        x0 = x_events_start - 10
+                        x1 = width - 10
+                        y0 = ev_y - 4
+                        y1 = ev_y + 30
+                        draw.rounded_rectangle([(x0, y0), (x1, y1)], radius=6, fill=fill_color, outline=outline_color, width=2)
+                    else:
+                        # Option 1: 1px black border + rounded color bar on the left (pure white card background)
+                        text_color = COLOR_TEXT
+                        x0 = x_events_start - 10
+                        x1 = width - 10
+                        y0 = ev_y - 4
+                        y1 = ev_y + 30
+                        
+                        draw.rounded_rectangle([(x0, y0), (x1, y1)], radius=6, fill=(255, 255, 255), outline=(0, 0, 0), width=1)
+                        draw.rounded_rectangle([(x0 + 2, y0 + 2), (x0 + 10, y1 - 2)], radius=3, fill=person_color)
+                    
                     # 12-hour clock format (e.g. 04:00 PM)
                     time_str = "ВЕСЬ ДЕНЬ" if ev["all_day"] else ev["start"].strftime("%I:%M %p")
-                    draw_sharp_text(img, (x_events_start, ev_y), time_str, font_today_time, COLOR_ACCENT)
-                    
-                    summary = ev["summary"]
-                    # Assign custom color highlights dynamically
-                    person = get_person_from_summary(summary, unique_people)
-                    summary_color = person_colors.get(person, COLOR_TEXT) if person else COLOR_TEXT
-                        
-                    draw_sharp_text(img, (x_events_start + 110, ev_y), summary, font_today_title, summary_color)
+                    text_offset = 6
+                    draw_sharp_text(img, (x_events_start + text_offset, ev_y), time_str, font_today_time, text_color)
+                    draw_sharp_text(img, (x_events_start + 110 + text_offset, ev_y), summary, font_today_title, text_color)
         else:
             if not day_events:
                 draw_sharp_text(img, (x_events_start, y_cursor + 20), "Нет занятий", font_no_events, COLOR_TEXT)

@@ -70,13 +70,16 @@ def main():
         
     # 2. Parse ICS to representation spec
     spec = ics_parser.parse_ics_to_spec(ical_data, timezone_name, start_date, end_date)
+    spec["current_time"] = now.isoformat()
     
-    # 3. Calculate state hash for change detection
-    state_str = f"Date: {today_date}\nRenderer: {renderer_type}\n"
-    for ev in spec["events"]:
-        state_str += f"{ev['summary']}|{ev['start']}|{ev['end']}|{ev['all_day']}\n"
+    person_colors = config.get("person_colors", {})
     
-    current_hash = hashlib.sha256(state_str.encode('utf-8')).hexdigest()
+    # 3. Render spec to PIL Image
+    img = layout_renderer.render_layout(spec, resolution, renderer_type, person_colors)
+    
+    # 4. Calculate state hash based on PIL Image pixels for change detection
+    image_bytes = img.tobytes()
+    current_hash = hashlib.sha256(image_bytes).hexdigest()
     
     hash_file_path = os.path.join(os.path.dirname(__file__), ".calendar_hash")
     previous_hash = None
@@ -89,12 +92,9 @@ def main():
             
     force_update = "--force" in sys.argv
     
-    # 4. Render spec to PIL Image
-    img = layout_renderer.render_layout(spec, resolution, renderer_type)
-    
     # 5. Check if we can skip screen refresh (preserves e-ink life)
     if not dry_run and not force_update and previous_hash == current_hash:
-        logger.info("No changes in calendar events or current date. Skipping Inky display refresh to preserve screen life.")
+        logger.info("No changes in calendar layout rendering or current date. Skipping Inky display refresh to preserve screen life.")
         # Still update the local calendar.png copy
         try:
             output_path = os.path.join(os.path.dirname(__file__), "calendar.png")

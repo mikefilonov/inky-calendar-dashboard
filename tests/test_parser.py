@@ -57,6 +57,15 @@ def main():
     print(f"Parsing ICS for date range {today_date} to {end_date} in timezone {args.timezone}...")
     spec = parse_ics_to_spec(ical_data, args.timezone, today_date, end_date)
 
+    # Inject a deterministic current_time (e.g. 18:45:00) on today_date for rendering tests
+    import pytz
+    try:
+        tz = pytz.timezone(args.timezone)
+        mock_now = tz.localize(datetime.datetime.combine(today_date, datetime.time(18, 45, 0)))
+    except Exception:
+        mock_now = datetime.datetime.combine(today_date, datetime.time(18, 45, 0)).replace(tzinfo=datetime.timezone.utc)
+    spec["current_time"] = mock_now.isoformat()
+
     # Ensure output parent directory exists
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
 
