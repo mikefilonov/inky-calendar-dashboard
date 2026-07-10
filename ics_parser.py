@@ -98,8 +98,8 @@ def parse_ics_to_spec(ical_data: bytes, tz_name: str, start_date: datetime.date,
                     "all_day": start_allday
                 })
 
-    # Sort events by start time
-    events.sort(key=lambda x: x["start"])
+    # Sort events by start time, end time, and summary for stable deterministic ordering
+    events.sort(key=lambda x: (x["start"], x["end"], x["summary"]))
 
     # Deduplicate events
     seen = set()

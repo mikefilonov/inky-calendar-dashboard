@@ -138,7 +138,7 @@ def draw_grid_layout(resolution, events, today_date, person_colors=None, now=Non
     draw.line([(col_x_positions[1], y_day_header), (col_x_positions[1], height)], fill=COLOR_GRID, width=1)
     
     # 4. Draw Today's Column (Left Column)
-    today_events = sorted(events_by_date[today_date], key=lambda e: e["start"])
+    today_events = sorted(events_by_date[today_date], key=lambda e: (e["start"], e["end"], e["summary"]))
     num_today = len(today_events)
     if num_today > 0:
         card_spacing = 10
@@ -298,7 +298,7 @@ def draw_grid_layout(resolution, events, today_date, person_colors=None, now=Non
         draw_sharp_text(img, (col_x_positions[1] + 12, y_seg_start + 8), sub_hdr_text, font_event_person_other, COLOR_TEXT)
         
         # Fetch events for this day
-        day_events = sorted(events_by_date[day_date], key=lambda e: e["start"])
+        day_events = sorted(events_by_date[day_date], key=lambda e: (e["start"], e["end"], e["summary"]))
         num_day = len(day_events)
         if num_day > 0:
             item_spacing = 2
