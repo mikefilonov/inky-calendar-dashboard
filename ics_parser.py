@@ -26,27 +26,50 @@ def parse_ics_to_spec(ical_data: bytes, tz_name: str, start_date: datetime.date,
     start_filter = datetime.datetime.combine(start_date, datetime.time.min).replace(tzinfo=tz)
     end_filter = datetime.datetime.combine(end_date, datetime.time.max).replace(tzinfo=tz)
 
-    events = []
+    def make_aware(dt, default_tz):
+        if isinstance(dt, datetime.date) and not isinstance(dt, datetime.datetime):
+            return datetime.datetime.combine(dt, datetime.time.min).replace(tzinfo=default_tz), True
+        if dt.tzinfo is None:
+            return default_tz.localize(dt), False
+        return dt.astimezone(default_tz), False
 
+    events = []
+    overrides = {}
+    components_to_process = []
+
+    # First Pass: collect all overrides and prepare list of components to process
     for component in cal.walk():
         if component.name != "VEVENT":
             continue
 
+        uid = str(component.get("uid", ""))
         summary = str(component.get("summary", "No Title"))
-        dtstart = component.get("dtstart").dt
+        dtstart_prop = component.get("dtstart")
+        if not dtstart_prop:
+            continue
+        dtstart = dtstart_prop.dt
         dtend = component.get("dtend")
         dtend = dtend.dt if dtend else dtstart
 
-        def make_aware(dt, default_tz):
-            if isinstance(dt, datetime.date) and not isinstance(dt, datetime.datetime):
-                return datetime.datetime.combine(dt, datetime.time.min).replace(tzinfo=default_tz), True
-            if dt.tzinfo is None:
-                return default_tz.localize(dt), False
-            return dt.astimezone(default_tz), False
-
         start_dt, start_allday = make_aware(dtstart, tz)
         end_dt, end_allday = make_aware(dtend, tz)
+        status = str(component.get("status", "")).upper()
 
+        rec_id_prop = component.get("recurrence-id")
+        if rec_id_prop:
+            rec_id_dt, _ = make_aware(rec_id_prop.dt, tz)
+            overrides[(uid, rec_id_dt)] = {
+                "start_dt": start_dt,
+                "end_dt": end_dt,
+                "summary": summary,
+                "all_day": start_allday,
+                "cancelled": status == "CANCELLED"
+            }
+        else:
+            components_to_process.append((component, uid, summary, start_dt, end_dt, start_allday, status))
+
+    # Second Pass: process all components that are NOT overrides
+    for component, uid, summary, start_dt, end_dt, start_allday, status in components_to_process:
         rrule_prop = component.get("rrule")
         if rrule_prop:
             try:
@@ -67,7 +90,7 @@ def parse_ics_to_spec(ical_data: bytes, tz_name: str, start_date: datetime.date,
 
                 rrule_str = rrule_prop.to_ical().decode("utf-8")
                 naive_start = start_dt.astimezone(tz).replace(tzinfo=None)
-                rule = rrule.rrulestr(rrule_str, dtstart=naive_start)
+                rule = rrule.rrulestr(rrule_str, dtstart=naive_start, ignoretz=True)
 
                 occurrences = rule.between(
                     start_filter.replace(tzinfo=None),
@@ -75,9 +98,15 @@ def parse_ics_to_spec(ical_data: bytes, tz_name: str, start_date: datetime.date,
                     inc=True
                 )
 
+                if naive_start not in occurrences:
+                    if start_filter.replace(tzinfo=None) <= naive_start <= end_filter.replace(tzinfo=None):
+                        occurrences.append(naive_start)
+
                 for occ in occurrences:
                     occ_start = tz.localize(occ)
                     if any(occ_start == ex_dt for ex_dt in exdates):
+                        continue
+                    if (uid, occ_start) in overrides:
                         continue
                     duration = end_dt - start_dt
                     occ_end = occ_start + duration
@@ -90,12 +119,26 @@ def parse_ics_to_spec(ical_data: bytes, tz_name: str, start_date: datetime.date,
             except Exception as e:
                 logger.warning(f"Error parsing recurring event '{summary}': {e}")
         else:
+            if status != "CANCELLED":
+                if start_dt <= end_filter and end_dt >= start_filter:
+                    events.append({
+                        "summary": summary,
+                        "start": start_dt,
+                        "end": end_dt,
+                        "all_day": start_allday
+                    })
+
+    # Add active overrides that fall in the window
+    for override in overrides.values():
+        if not override["cancelled"]:
+            start_dt = override["start_dt"]
+            end_dt = override["end_dt"]
             if start_dt <= end_filter and end_dt >= start_filter:
                 events.append({
-                    "summary": summary,
+                    "summary": override["summary"],
                     "start": start_dt,
                     "end": end_dt,
-                    "all_day": start_allday
+                    "all_day": override["all_day"]
                 })
 
     # Sort events by start time, end time, and summary for stable deterministic ordering
